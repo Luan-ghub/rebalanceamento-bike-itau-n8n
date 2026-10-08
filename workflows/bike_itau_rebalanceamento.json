@@ -1,0 +1,839 @@
+{
+  "name": "Bike Itaú Salvador | Rebalanceamento automático",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a001",
+      "name": "Executar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        140
+      ],
+      "notes": "Inicia o fluxo sob demanda para testes e análises pontuais.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a002",
+      "name": "A cada 15 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "notes": "Quando o workflow estiver publicado, este gatilho inicia uma nova consulta automaticamente.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Todos os limites ficam reunidos aqui para facilitar ajustes futuros.\nreturn [{\n  json: {\n    limite_critico: 0.15,\n    limite_atencao: 0.30,\n    limite_doadora: 0.80,\n    limite_lotacao: 0.90,\n    reserva_doadora: 0.40,\n    alvo_destino: 0.50,\n    transferencia_minima: 2,\n    transferencia_maxima: 8,\n    distancia_maxima_km: 8,\n    fuso_horario: 'America/Bahia'\n  }\n}];"
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a003",
+      "name": "Parâmetros do projeto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        220
+      ],
+      "notes": "As regras são parametrizáveis. Os percentuais podem ser alterados sem mexer no restante do fluxo.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "ordens_rebalanceamento_bikes",
+        "columns": {
+          "column": [
+            {
+              "name": "chave_ordem",
+              "type": "string"
+            },
+            {
+              "name": "criada_em",
+              "type": "date"
+            },
+            {
+              "name": "origem_id",
+              "type": "string"
+            },
+            {
+              "name": "origem",
+              "type": "string"
+            },
+            {
+              "name": "destino_id",
+              "type": "string"
+            },
+            {
+              "name": "destino",
+              "type": "string"
+            },
+            {
+              "name": "quantidade",
+              "type": "number"
+            },
+            {
+              "name": "distancia_km",
+              "type": "number"
+            },
+            {
+              "name": "prioridade",
+              "type": "string"
+            },
+            {
+              "name": "motivo",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "string"
+            },
+            {
+              "name": "origem_ocupacao_pct",
+              "type": "number"
+            },
+            {
+              "name": "destino_ocupacao_pct",
+              "type": "number"
+            },
+            {
+              "name": "execucao_id",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a004",
+      "name": "Preparar tabela de ordens",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        220
+      ],
+      "notes": "Cria a fila operacional na primeira execução. Nas próximas execuções, reutiliza a mesma tabela.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "historico_execucoes_bikes",
+        "columns": {
+          "column": [
+            {
+              "name": "execucao_id",
+              "type": "string"
+            },
+            {
+              "name": "executada_em",
+              "type": "date"
+            },
+            {
+              "name": "fonte",
+              "type": "string"
+            },
+            {
+              "name": "total_estacoes",
+              "type": "number"
+            },
+            {
+              "name": "estacoes_operacionais",
+              "type": "number"
+            },
+            {
+              "name": "criticas",
+              "type": "number"
+            },
+            {
+              "name": "atencao",
+              "type": "number"
+            },
+            {
+              "name": "equilibradas",
+              "type": "number"
+            },
+            {
+              "name": "excesso",
+              "type": "number"
+            },
+            {
+              "name": "risco_lotacao",
+              "type": "number"
+            },
+            {
+              "name": "ordens_sugeridas",
+              "type": "number"
+            },
+            {
+              "name": "bicicletas_sugeridas",
+              "type": "number"
+            },
+            {
+              "name": "mensagem",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a005",
+      "name": "Preparar histórico",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        220
+      ],
+      "notes": "O histórico permite comprovar quando o processo rodou e quais resultados encontrou.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "https://salvador.publicbikesystem.net/customer/gbfs/v3.0/station_information",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a006",
+      "name": "Consultar cadastro das estações",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1040,
+        220
+      ],
+      "notes": "Consulta nomes, localização e capacidade das estações. A API é pública e não exige chave.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "https://salvador.publicbikesystem.net/customer/gbfs/v3.0/station_status",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a007",
+      "name": "Consultar posição atual",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1300,
+        220
+      ],
+      "notes": "Consulta bicicletas disponíveis, vagas livres e situação operacional de cada estação.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reúne o cadastro das estações com a posição atual e aplica as regras operacionais.\nconst config = $('Parâmetros do projeto').first().json;\nconst cadastros = $('Consultar cadastro das estações').first().json.data?.stations || [];\nconst posicoes = $input.first().json.data?.stations || [];\n\nif (!cadastros.length || !posicoes.length) {\n  throw new Error('A API não devolveu as listas de estações no formato esperado.');\n}\n\nfunction textoLocalizado(valor) {\n  if (typeof valor === 'string') return valor;\n  if (!Array.isArray(valor) || !valor.length) return 'Estação sem nome';\n  const portugues = valor.find(item => item.language === 'pt' || item.language === 'pt-BR');\n  return (portugues || valor[0]).text || 'Estação sem nome';\n}\n\nfunction distanciaKm(lat1, lon1, lat2, lon2) {\n  const raio = 6371;\n  const rad = graus => graus * Math.PI / 180;\n  const dLat = rad(lat2 - lat1);\n  const dLon = rad(lon2 - lon1);\n  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;\n  return raio * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n}\n\nfunction classificar(ocupacao) {\n  if (ocupacao <= config.limite_critico) return 'Crítica';\n  if (ocupacao < config.limite_atencao) return 'Atenção';\n  if (ocupacao > config.limite_lotacao) return 'Risco de lotação';\n  if (ocupacao > config.limite_doadora) return 'Excesso';\n  return 'Equilibrada';\n}\n\nconst cadastroPorId = new Map(cadastros.map(item => [String(item.station_id), item]));\n\nconst estacoes = posicoes.map(posicao => {\n  const id = String(posicao.station_id);\n  const cadastro = cadastroPorId.get(id) || {};\n  const capacidade = Number(cadastro.capacity) || 0;\n  const bicicletas = Number(posicao.num_vehicles_available) || 0;\n  const vagas = Number(posicao.num_docks_available) || 0;\n  const operacional = Boolean(posicao.is_installed) && Boolean(posicao.is_renting) && Boolean(posicao.is_returning) && capacidade > 0;\n  const ocupacao = capacidade > 0 ? bicicletas / capacidade : 0;\n\n  return {\n    station_id: id,\n    nome: textoLocalizado(cadastro.name),\n    latitude: Number.isFinite(Number(cadastro.lat)) ? Number(cadastro.lat) : null,\n    longitude: Number.isFinite(Number(cadastro.lon)) ? Number(cadastro.lon) : null,\n    capacidade,\n    bicicletas,\n    vagas,\n    operacional,\n    ocupacao,\n    ocupacao_pct: Number((ocupacao * 100).toFixed(1)),\n    classificacao: operacional ? classificar(ocupacao) : 'Indisponível'\n  };\n});\n\nconst operacionais = estacoes.filter(estacao => estacao.operacional);\nconst destinos = operacionais\n  .filter(estacao => estacao.ocupacao <= config.limite_critico)\n  .sort((a, b) => a.ocupacao - b.ocupacao || a.bicicletas - b.bicicletas);\n\nconst doadoras = operacionais\n  .filter(estacao => estacao.ocupacao > config.limite_doadora)\n  .map(estacao => ({\n    ...estacao,\n    saldo_disponivel: Math.max(0, estacao.bicicletas - Math.ceil(estacao.capacidade * config.reserva_doadora))\n  }));\n\nconst agora = new Date();\nconst partes = new Intl.DateTimeFormat('en-CA', {\n  timeZone: config.fuso_horario, year: 'numeric', month: '2-digit', day: '2-digit'\n}).formatToParts(agora);\nconst partesData = Object.fromEntries(partes.map(parte => [parte.type, parte.value]));\nconst dataLocal = `${partesData.year}-${partesData.month}-${partesData.day}`;\nconst momento = agora.toISOString();\nconst execucaoId = `bike_salvador_${momento.replace(/[-:.TZ]/g, '').slice(0, 14)}`;\nconst ordens = [];\n\nfor (const destino of destinos) {\n  const necessidade = Math.max(0, Math.ceil(destino.capacidade * config.alvo_destino) - destino.bicicletas);\n\n  const candidatas = doadoras\n    .filter(doadora => doadora.station_id !== destino.station_id)\n    .filter(doadora => doadora.saldo_disponivel >= config.transferencia_minima)\n    .filter(doadora => doadora.latitude !== null && doadora.longitude !== null)\n    .filter(() => destino.latitude !== null && destino.longitude !== null)\n    .map(doadora => ({\n      doadora,\n      distancia: distanciaKm(doadora.latitude, doadora.longitude, destino.latitude, destino.longitude)\n    }))\n    .filter(candidata => candidata.distancia <= config.distancia_maxima_km)\n    .sort((a, b) => a.distancia - b.distancia);\n\n  if (!candidatas.length || necessidade < config.transferencia_minima) continue;\n\n  const escolhida = candidatas[0];\n  const quantidade = Math.min(necessidade, escolhida.doadora.saldo_disponivel, config.transferencia_maxima);\n  if (quantidade < config.transferencia_minima) continue;\n\n  escolhida.doadora.saldo_disponivel -= quantidade;\n  const prioridade = destino.bicicletas === 0 ? 'Crítica' : destino.ocupacao <= 0.10 ? 'Alta' : 'Média';\n\n  ordens.push({\n    chave_ordem: `${dataLocal}_${escolhida.doadora.station_id}_${destino.station_id}`,\n    criada_em: momento,\n    origem_id: escolhida.doadora.station_id,\n    origem: escolhida.doadora.nome,\n    destino_id: destino.station_id,\n    destino: destino.nome,\n    quantidade,\n    distancia_km: Number(escolhida.distancia.toFixed(2)),\n    prioridade,\n    motivo: destino.bicicletas === 0 ? 'Estação sem bicicletas disponíveis' : `Estação com apenas ${destino.ocupacao_pct}% de ocupação`,\n    status: 'Pendente',\n    origem_ocupacao_pct: escolhida.doadora.ocupacao_pct,\n    destino_ocupacao_pct: destino.ocupacao_pct,\n    execucao_id: execucaoId\n  });\n}\n\nconst contar = classificacao => operacionais.filter(estacao => estacao.classificacao === classificacao).length;\nconst bicicletasSugeridas = ordens.reduce((total, ordem) => total + ordem.quantidade, 0);\nconst mensagem = ordens.length\n  ? `${ordens.length} ordens sugeridas, movimentando ${bicicletasSugeridas} bicicletas.`\n  : 'Nenhuma ordem foi necessária com os parâmetros atuais.';\n\nconst resumo = {\n  execucao_id: execucaoId,\n  executada_em: momento,\n  total_estacoes: estacoes.length,\n  estacoes_operacionais: operacionais.length,\n  criticas: contar('Crítica'),\n  atencao: contar('Atenção'),\n  equilibradas: contar('Equilibrada'),\n  excesso: contar('Excesso'),\n  risco_lotacao: contar('Risco de lotação'),\n  ordens_sugeridas: ordens.length,\n  bicicletas_sugeridas: bicicletasSugeridas,\n  mensagem\n};\n\nreturn [{\n  json: {\n    resumo,\n    ordens,\n    log_execucao: { ...resumo, fonte: 'GBFS Bike Itaú Salvador' },\n    estacoes_criticas: destinos.slice(0, 10).map(estacao => ({\n      station_id: estacao.station_id,\n      nome: estacao.nome,\n      bicicletas: estacao.bicicletas,\n      capacidade: estacao.capacidade,\n      ocupacao_pct: estacao.ocupacao_pct\n    }))\n  }\n}];"
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a008",
+      "name": "Analisar e gerar ordens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        220
+      ],
+      "notes": "Calcula ocupação, criticidade, distância e quantidade sugerida. Não utiliza previsão ou consumo inventado.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cada ordem vira um item separado para ser registrada na fila operacional.\nconst ordens = $input.first().json.ordens || [];\nreturn ordens.map(ordem => ({ json: ordem }));"
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a009",
+      "name": "Separar ordens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "value": "ordens_rebalanceamento_bikes",
+          "mode": "name"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "chave_ordem",
+              "condition": "eq",
+              "keyValue": "={{ $json.chave_ordem }}"
+            }
+          ]
+        }
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a010",
+      "name": "Ignorar ordens duplicadas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        40
+      ],
+      "notes": "A chave considera data, origem e destino. A mesma recomendação não é aberta duas vezes no mesmo dia.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "ordens_rebalanceamento_bikes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chave_ordem",
+              "displayName": "chave_ordem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "criada_em",
+              "displayName": "criada_em",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origem_id",
+              "displayName": "origem_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origem",
+              "displayName": "origem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "destino_id",
+              "displayName": "destino_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "destino",
+              "displayName": "destino",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quantidade",
+              "displayName": "quantidade",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "distancia_km",
+              "displayName": "distancia_km",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridade",
+              "displayName": "prioridade",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origem_ocupacao_pct",
+              "displayName": "origem_ocupacao_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "destino_ocupacao_pct",
+              "displayName": "destino_ocupacao_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execucao_id",
+              "displayName": "execucao_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a011",
+      "name": "Registrar novas ordens",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2340,
+        40
+      ],
+      "notes": "A tabela funciona como uma fila de trabalho. O status pode ser alterado para Em execução, Concluída ou Cancelada.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Separa apenas os indicadores que serão guardados no histórico.\nreturn [{ json: $input.first().json.log_execucao }];"
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a012",
+      "name": "Preparar log da execução",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "historico_execucoes_bikes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "execucao_id",
+              "displayName": "execucao_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "executada_em",
+              "displayName": "executada_em",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fonte",
+              "displayName": "fonte",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_estacoes",
+              "displayName": "total_estacoes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "estacoes_operacionais",
+              "displayName": "estacoes_operacionais",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "criticas",
+              "displayName": "criticas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "atencao",
+              "displayName": "atencao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "equilibradas",
+              "displayName": "equilibradas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "excesso",
+              "displayName": "excesso",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "risco_lotacao",
+              "displayName": "risco_lotacao",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ordens_sugeridas",
+              "displayName": "ordens_sugeridas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bicicletas_sugeridas",
+              "displayName": "bicicletas_sugeridas",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mensagem",
+              "displayName": "mensagem",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a013",
+      "name": "Registrar execução",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2080,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consolida os principais indicadores para acompanhamento da execução.\nconst entrada = $input.first().json;\nreturn [{\n  json: {\n    ...entrada.resumo,\n    estacoes_criticas: entrada.estacoes_criticas\n  }\n}];"
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a014",
+      "name": "Resumo da execução",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        420
+      ],
+      "notes": "Consulte a saída deste nó para acompanhar os indicadores e as estações críticas.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## 1. Início e parâmetros\nO fluxo pode ser executado manualmente ou a cada 15 minutos. Todos os limites ficam concentrados em um único nó.",
+        "height": 520,
+        "width": 470,
+        "color": 5
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a015",
+      "name": "Nota início",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Estrutura de controle\nAs tabelas internas são criadas automaticamente. Uma guarda as ordens e a outra registra cada execução.",
+        "height": 520,
+        "width": 540,
+        "color": 3
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a016",
+      "name": "Nota tabelas",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        450,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Dados reais e análise\nDois endpoints públicos informam capacidade, localização, bicicletas, vagas e situação operacional.",
+        "height": 520,
+        "width": 700,
+        "color": 4
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a017",
+      "name": "Nota análise",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Entregas operacionais\nO fluxo cria ordens sem duplicidade, registra o histórico e produz indicadores consolidados da execução.",
+        "height": 700,
+        "width": 800,
+        "color": 6
+      },
+      "id": "2c27e193-8bf4-4cda-a2be-8be8c6f3a018",
+      "name": "Nota entregas",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Executar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Parâmetros do projeto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada 15 minutos": {
+      "main": [
+        [
+          {
+            "node": "Parâmetros do projeto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parâmetros do projeto": {
+      "main": [
+        [
+          {
+            "node": "Preparar tabela de ordens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar tabela de ordens": {
+      "main": [
+        [
+          {
+            "node": "Preparar histórico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar histórico": {
+      "main": [
+        [
+          {
+            "node": "Consultar cadastro das estações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar cadastro das estações": {
+      "main": [
+        [
+          {
+            "node": "Consultar posição atual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar posição atual": {
+      "main": [
+        [
+          {
+            "node": "Analisar e gerar ordens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analisar e gerar ordens": {
+      "main": [
+        [
+          {
+            "node": "Separar ordens",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar log da execução",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resumo da execução",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar ordens": {
+      "main": [
+        [
+          {
+            "node": "Ignorar ordens duplicadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ignorar ordens duplicadas": {
+      "main": [
+        [
+          {
+            "node": "Registrar novas ordens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar log da execução": {
+      "main": [
+        [
+          {
+            "node": "Registrar execução",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bahia"
+  }
+}
