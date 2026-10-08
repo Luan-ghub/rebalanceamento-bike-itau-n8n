@@ -1,0 +1,14 @@
+{
+  "name": "rebalanceamento-bikes-n8n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MVP de automação para rebalanceamento de estações do Bike Itaú Salvador.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/test_logica_rebalanceamento.js && node tests/validar_workflow.js",
+    "validar-api": "node scripts/validar_api.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
